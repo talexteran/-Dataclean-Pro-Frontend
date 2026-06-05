@@ -1,0 +1,111 @@
+Idea Landing page:
+noduplicates
+Mejora la precision de tus reportes con ceroduplicates
+
+
+
+CeroDuplicate — elimino duplicados de tu CSV, mejoro la calidad de tus datos por $5 USD
+ceroduplicate
+datos 100% locales
+limpieza instantanea de datos
+Elimina duplicados aqui.
+Mejoro la calidad de tus datos.
+Reduzco el ruido y mejoro la calidad de tus datos por ti — para que cada decision que tomes se base en informacion limpia y confiable.
+
+Arrastra tu CSV aqui
+
+o haz clic para seleccionar
+
+limpiar por $1.00 USD
+sin registro
+datos nunca salen de tu equipo
+descarga inmediata
+22 k+
+
+filas procesadas
+
+$1
+
+precio por archivo
+
+100%
+
+privacidad local
+
+caso de exito
+
+Dataset Vrbo — Kaggle
+
+Base de datos de reservas de alojamiento
+
+limpio
+El dataset llego con filas duplicadas, nombres en mayusculas mezclados, espacios extra y formatos de fecha inconsistentes. Paso por ceroduplicates en segundos.
+
+antes
+
+22,026
+
+filas con duplicados
+
+despues
+
+dataset limpio
+
+listo para ML en segundos
+
+booking_id
+
+columna clave usada
+
+13 columnas
+
+detectadas auto
+
+$1.00
+
+costo total
+
+"Tenia 22 mil filas de reservas con duplicados mezclados. Cargue el CSV, seleccione booking_id como columna clave y en segundos tenia el dataset listo para entrenar el modelo. Literalmente un dolar bien gastado."
+
+— primer cliente · dataset Vrbo / Kaggle · procesado con ceroduplicates
+
+como funciona
+
+01
+
+Sube tu CSV
+
+Procesado en tu navegador
+
+02
+
+Elige columnas
+
+Define que es un duplicado
+
+03
+
+Revisa preview
+
+Filas duplicadas en rojo
+
+04
+
+Paga y descarga
+
+CSV limpio al instante
+
+precio
+
+Un archivo, un pago
+
+Sin suscripcion. Sin tramites. Sin sorpresas.
+
+$1.00
+
+por archivo CSV
+
+eliminar mis duplicados ahora — $1.00 ↗
+ceroduplicate © 2026
+
+datos procesados localmente · sin servidores · sin almacenamiento

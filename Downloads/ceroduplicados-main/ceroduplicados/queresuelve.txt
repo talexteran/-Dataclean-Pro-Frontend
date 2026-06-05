@@ -1,0 +1,6 @@
+Pronblema que resuelve:
+Datos duplicados: Tener datos duplicados reduce la capacidad de almacenamiento de las empresas y las opciones de realizar el mejor análisis. Es decir, si tenemos varias copias de los mismos datos, no podremos añadir nueva información que mejoraría su análisis, lo que, además, reduce la calidad de los datos de la empresa. Para evitarlo lo mejor es deduplicar los datos lo que minimiza los errores, reduce coste y favorece su correcto uso.
+
+que soluciona ceroduplicates: mejora la precision de tus reportes con ceroduplicates, 
+
+Que hace?, elimina duplicados mejorando la calidad de tus datos

@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CeroDuplicados — Demo sin pago</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a08;
+    --surface: #111110;
+    --border: #222220;
+    --accent: #c8f135;
+    --text: #f0ede6;
+    --muted: #6b6b65;
+    --red: #ff4444;
+    --green: #4caf50;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh; overflow-x: hidden;
+  }
+
+  /* ── DEMO BANNER ── */
+  .demo-banner {
+    background: rgba(200,241,53,0.08);
+    border-bottom: 1px solid rgba(200,241,53,0.25);
+    color: var(--accent);
+    text-align: center;
+    padding: 10px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    position: sticky; top: 0; z-index: 200;
+    display: flex; align-items: center; justify-content: center; gap: 16px;
+  }
+  .demo-banner .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+    animation: blink 1.4s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ── NOISE ── */
+  .noise {
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 999; opacity: 0.4;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    min-height: 100vh;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 80px 40px 60px;
+    position: relative; overflow: hidden;
+  }
+  .hero::before {
+    content: ''; position: absolute; top: -200px; right: -200px;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(200,241,53,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .badge {
+    display: inline-block; background: var(--accent); color: var(--bg);
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500;
+    padding: 4px 10px; border-radius: 2px; letter-spacing: 0.05em; margin-bottom: 32px;
+  }
+  .hero h1 {
+    font-size: clamp(48px, 8vw, 100px); font-weight: 800;
+    line-height: 0.95; letter-spacing: -0.03em; max-width: 900px;
+  }
+  .hero h1 span { color: var(--accent); }
+  .hero p { margin-top: 28px; font-size: 18px; color: var(--muted); max-width: 500px; line-height: 1.6; }
+  .cta-row { margin-top: 48px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .btn-primary {
+    background: var(--accent); color: var(--bg); border: none;
+    padding: 18px 36px; font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700;
+    cursor: pointer; border-radius: 4px; transition: transform 0.15s, box-shadow 0.15s;
+    letter-spacing: 0.02em;
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(200,241,53,0.25); }
+  .trust-pills { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
+  .pill {
+    border: 1px solid var(--border); border-radius: 20px; padding: 6px 14px;
+    font-size: 12px; color: var(--muted); font-family: 'JetBrains Mono', monospace;
+  }
+  .pill.accent { border-color: rgba(200,241,53,0.4); color: var(--accent); background: rgba(200,241,53,0.06); }
+  .stats-row {
+    display: flex; gap: 60px; margin-top: 80px; padding-top: 40px;
+    border-top: 1px solid var(--border); flex-wrap: wrap;
+  }
+  .stat-item strong { display: block; font-size: 40px; font-weight: 800; color: var(--accent); line-height: 1; }
+  .stat-item span { font-size: 13px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+
+  /* ── STEPS ── */
+  .section { padding: 100px 40px; max-width: 1100px; margin: 0 auto; }
+  .section-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent);
+    letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 16px;
+  }
+  .section h2 { font-size: clamp(32px,5vw,56px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; margin-bottom: 60px; }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 2px; }
+  .step { background: var(--surface); padding: 40px 30px; transition: background 0.2s; position: relative; }
+  .step:hover { background: #161614; }
+  .step.demo-step::after {
+    content: 'DEMO'; position: absolute; top: 14px; right: 14px;
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em;
+    background: rgba(200,241,53,0.15); color: var(--accent);
+    padding: 2px 6px; border-radius: 2px; border: 1px solid rgba(200,241,53,0.3);
+  }
+  .step-num { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent); letter-spacing: 0.1em; margin-bottom: 20px; }
+  .step h3 { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+  .step p { font-size: 14px; color: var(--muted); line-height: 1.6; }
+  .step code { color: var(--accent); font-family: 'JetBrains Mono', monospace; }
+  .step .skipped { color: rgba(107,107,101,0.45); text-decoration: line-through; }
+
+  /* ── APP ── */
+  .app-section {
+    background: var(--surface);
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    padding: 80px 40px;
+  }
+  .app-container { max-width: 860px; margin: 0 auto; }
+  .app-header { text-align: center; margin-bottom: 48px; }
+  .app-header h2 { font-size: 36px; font-weight: 800; letter-spacing: -0.03em; }
+  .app-header p { color: var(--muted); margin-top: 8px; font-size: 15px; }
+  .app-header .demo-note {
+    display: inline-block; margin-top: 12px;
+    background: rgba(200,241,53,0.08); border: 1px solid rgba(200,241,53,0.25);
+    color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    padding: 5px 12px; border-radius: 3px; letter-spacing: 0.05em;
+  }
+
+  /* ── DROPZONE ── */
+  .dropzone {
+    border: 2px dashed var(--border); border-radius: 8px; padding: 60px 40px;
+    text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+  .dropzone:hover, .dropzone.drag-over { border-color: var(--accent); background: rgba(200,241,53,0.03); }
+  .dropzone input { position: absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+  .drop-icon { font-size: 48px; margin-bottom: 16px; display: block; }
+  .dropzone h3 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+  .dropzone p { color: var(--muted); font-size: 14px; }
+
+  /* ── ANALYSIS ── */
+  #analysis { display: none; margin-top: 32px; }
+  .file-info {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 16px 20px; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
+  }
+  .fname { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--accent); }
+  .fmeta { font-size: 12px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+  .progress-bar { height: 3px; background: var(--border); border-radius: 2px; margin: 16px 0; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.5s ease; }
+  .col-select-label { font-size: 13px; color: var(--muted); margin-bottom: 10px; font-family: 'JetBrains Mono', monospace; }
+  .col-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+  .col-chip {
+    border: 1px solid var(--border); border-radius: 4px; padding: 6px 14px;
+    font-size: 12px; font-family: 'JetBrains Mono', monospace; cursor: pointer;
+    transition: all 0.15s; background: transparent; color: var(--muted);
+  }
+  .col-chip.selected { border-color: var(--accent); background: rgba(200,241,53,0.1); color: var(--accent); }
+  .btn-analyze {
+    background: var(--accent); color: var(--bg); border: none;
+    padding: 14px 28px; font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700;
+    cursor: pointer; border-radius: 4px; width: 100%; margin-top: 8px; transition: opacity 0.15s;
+  }
+  .btn-analyze:hover { opacity: 0.9; }
+
+  /* ── RESULTS ── */
+  #results { display: none; margin-top: 32px; }
+  .stats-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin-bottom: 24px; }
+  .stat-card { background: var(--bg); border: 1px solid var(--border); padding: 24px 20px; text-align: center; }
+  .stat-card strong { display: block; font-size: 32px; font-weight: 800; color: var(--text); }
+  .stat-card strong.red { color: var(--red); }
+  .stat-card strong.green { color: var(--accent); }
+  .stat-card span { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+
+  /* ── TABLE ── */
+  .preview-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px; }
+  .table-legend { display: flex; gap: 16px; margin-bottom: 10px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .table-wrapper {
+    overflow-x: auto; border: 1px solid var(--border); border-radius: 4px;
+    max-height: 340px; overflow-y: auto; margin-bottom: 32px;
+  }
+  table { width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  th {
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 10px 12px; text-align: left; color: var(--muted);
+    font-weight: 500; white-space: nowrap; position: sticky; top: 0; z-index: 1;
+  }
+  td { padding: 8px 12px; border-bottom: 1px solid rgba(34,34,32,0.5); white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+  tr.dup { background: rgba(255,68,68,0.08); }
+  tr.dup td:first-child { border-left: 3px solid var(--red); }
+  tr.unique td:first-child { border-left: 3px solid var(--accent); }
+
+  /* ── DOWNLOAD (sin pago en demo) ── */
+  #download-state {
+    display: none; text-align: center; padding: 48px 40px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    position: relative; overflow: hidden;
+  }
+  #download-state::before {
+    content: ''; position: absolute; top: -100px; left: 50%; transform: translateX(-50%);
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(200,241,53,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .success-icon { font-size: 56px; margin-bottom: 16px; }
+  #download-state h3 { font-size: 28px; font-weight: 800; margin-bottom: 12px; }
+  #download-state p { color: var(--muted); margin-bottom: 32px; font-size: 14px; line-height: 1.8; }
+  #download-state code { color: var(--accent); font-family: 'JetBrains Mono', monospace; }
+  .btn-download {
+    display: inline-block; background: var(--accent); color: var(--bg); border: none;
+    padding: 18px 48px; font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800;
+    cursor: pointer; border-radius: 4px; transition: transform 0.15s, box-shadow 0.15s;
+    letter-spacing: 0.02em;
+  }
+  .btn-download:hover { transform: scale(1.03); box-shadow: 0 8px 30px rgba(200,241,53,0.2); }
+  .demo-skip-note {
+    margin-top: 20px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--muted); letter-spacing: 0.05em;
+  }
+  .demo-skip-note span { color: rgba(200,241,53,0.6); }
+
+  /* ── INTERNALS ── */
+  .internals-section { padding: 80px 40px; max-width: 1100px; margin: 0 auto; }
+  .internals-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 2px; margin-top: 40px; }
+  .internal-card { background: var(--surface); padding: 32px; border: 1px solid transparent; transition: border-color 0.2s; }
+  .internal-card:hover { border-color: var(--border); }
+  .internal-card .ic-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 12px; }
+  .internal-card h4 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+  .internal-card p { font-size: 13px; color: var(--muted); line-height: 1.7; }
+  .internal-card code { color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  .tag-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .tag { background: rgba(200,241,53,0.08); border: 1px solid rgba(200,241,53,0.2); color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 2px 8px; border-radius: 2px; letter-spacing: 0.05em; }
+
+  /* ── ERROR ── */
+  .error-msg {
+    background: rgba(255,68,68,0.1); border: 1px solid rgba(255,68,68,0.3); color: var(--red);
+    padding: 12px 16px; border-radius: 4px; font-size: 13px;
+    font-family: 'JetBrains Mono', monospace; margin-top: 12px; display: none;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid var(--border); padding: 32px 40px;
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+  }
+  .logo { font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
+  .logo span { color: var(--accent); }
+  footer p { font-size: 12px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+  .hero h1 { animation: fadeUp 0.7s ease both; }
+  .hero p  { animation: fadeUp 0.7s 0.1s ease both; }
+  .cta-row { animation: fadeUp 0.7s 0.2s ease both; }
+  .stats-row { animation: fadeUp 0.7s 0.35s ease both; }
+</style>
+</head>
+<body>
+<div class="noise"></div>
+
+<!-- DEMO BANNER -->
+<div class="demo-banner">
+  <span class="dot"></span>
+  MODO DEMO — pago desactivado · descarga libre · para pruebas internas
+  <span class="dot"></span>
+</div>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="badge">demo interno · v0.1 · sin cobro</div>
+  <h1>Elimina<br>duplicados.<br><span>Al instante.</span></h1>
+  <p>Versión demo del sistema completo. Sube un CSV real, analiza duplicados y descarga el dataset limpio — sin pasarela de pago activa.</p>
+  <div class="cta-row">
+    <button class="btn-primary" onclick="document.getElementById('app').scrollIntoView({behavior:'smooth'})">
+      Probar ahora ↓
+    </button>
+  </div>
+  <div class="trust-pills">
+    <span class="pill accent">🧪 modo demo</span>
+    <span class="pill">🔒 100% local</span>
+    <span class="pill">⚡ instantáneo</span>
+    <span class="pill">📥 descarga libre</span>
+    <span class="pill">💳 pago omitido</span>
+  </div>
+  <div class="stats-row">
+    <div class="stat-item"><strong>22K+</strong><span>filas procesadas</span></div>
+    <div class="stat-item"><strong>$5</strong><span>precio en producción</span></div>
+    <div class="stat-item"><strong>100%</strong><span>privacidad local</span></div>
+  </div>
+</section>
+
+<!-- FLOW -->
+<section class="section">
+  <div class="section-label">// flujo del sistema</div>
+  <h2>6 pasos.<br>Datos limpios.</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">01 —</div>
+      <h3>Subir CSV</h3>
+      <p>El usuario carga su dataset. Procesamiento 100% local: ningún dato sale del equipo.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">02 —</div>
+      <h3>Elegir columnas</h3>
+      <p>Selección de columnas clave que definen un duplicado. Equivale al parámetro <code>subset</code> de pandas.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">03 —</div>
+      <h3>Análisis automático</h3>
+      <p>Se ejecuta la lógica de <code>df.duplicated(keep='first')</code>: máscara booleana por fila con separador nulo para evitar colisiones de keys.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">04 —</div>
+      <h3>Vista previa</h3>
+      <p>Estadísticas (total / duplicados / únicos) y tabla con filas marcadas. Duplicados en rojo, únicos en verde.</p>
+    </div>
+    <div class="step demo-step">
+      <div class="step-num">05 —</div>
+      <h3>Pago $5 USD <span class="skipped">(omitido)</span></h3>
+      <p>En producción: pasarela MercadoPago + verificación server-side. En demo: este paso se salta automáticamente.</p>
+    </div>
+    <div class="step demo-step">
+      <div class="step-num">06 —</div>
+      <h3>Descargar CSV limpio</h3>
+      <p>Aplica <code>drop_duplicates(keep='first')</code> y genera <code>dataset_limpio.csv</code>. En demo: descarga directa sin verificar pago.</p>
+    </div>
+  </div>
+</section>
+
+<!-- APP -->
+<div id="app" class="app-section">
+  <div class="app-container">
+    <div class="app-header">
+      <div class="section-label">// herramienta · modo demo</div>
+      <h2>Sube tu dataset</h2>
+      <p>CSV de cualquier tamaño · procesado localmente en tu navegador</p>
+      <div class="demo-note">⚙ DEMO — el análisis es real · el pago está desactivado</div>
+    </div>
+
+    <!-- STEP 1: DROP -->
+    <div id="dropzone" class="dropzone"
+         ondragover="handleDragOver(event)"
+         ondragleave="handleDragLeave(event)"
+         ondrop="handleDrop(event)">
+      <input type="file" accept=".csv" onchange="handleFileSelect(event)" id="fileInput">
+      <span class="drop-icon">📂</span>
+      <h3>Arrastra tu CSV aquí</h3>
+      <p>o haz clic para seleccionar · máx 50MB</p>
+    </div>
+    <div class="error-msg" id="errorMsg"></div>
+
+    <!-- STEP 2: COLUMNAS -->
+    <div id="analysis">
+      <div class="file-info">
+        <span class="fname" id="fileName">—</span>
+        <span class="fmeta" id="fileMeta">—</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+
+      <p class="col-select-label">// Paso 2 — Selecciona columnas clave para detectar duplicados (vacío = todas las columnas):</p>
+      <div class="col-chips" id="colChips"></div>
+
+      <button class="btn-analyze" onclick="runAnalysis()">
+        Analizar duplicados — df.duplicated()
+      </button>
+    </div>
+
+    <!-- STEP 4 + 6: RESULTADOS + DESCARGA -->
+    <div id="results">
+      <div class="stats-cards">
+        <div class="stat-card"><strong id="statTotal">—</strong><span>filas totales</span></div>
+        <div class="stat-card"><strong id="statDups" class="red">—</strong><span>duplicados</span></div>
+        <div class="stat-card"><strong id="statClean" class="green">—</strong><span>filas únicas</span></div>
+      </div>
+
+      <p class="preview-label">// preview — primeras 60 filas</p>
+      <div class="table-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div> duplicado (será eliminado)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> único (se conserva)</div>
+      </div>
+      <div class="table-wrapper">
+        <table id="previewTable"></table>
+      </div>
+
+      <!-- DESCARGA DIRECTA (sin pago en demo) -->
+      <div id="download-state">
+        <div class="success-icon">✅</div>
+        <h3>Dataset limpio listo</h3>
+        <p>
+          Se identificaron <strong id="removedCount" style="color:var(--red)">—</strong> filas duplicadas.<br>
+          Se conservan <strong id="keepCount" style="color:var(--accent)">—</strong> filas únicas.<br><br>
+          Lógica aplicada: <code>df.drop_duplicates(keep='first')</code><br>
+          Archivo generado: <code id="outputName">dataset_limpio.csv</code>
+        </p>
+        <button class="btn-download" onclick="downloadClean()">
+          ⬇ Descargar CSV limpio
+        </button>
+        <p class="demo-skip-note">
+          En producción este botón requiere pago verificado vía <span>MercadoPago</span>.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- INTERNALS -->
+<section class="internals-section">
+  <div class="section-label">// internals · notas de desarrollo</div>
+  <h2 style="font-size:clamp(28px,4vw,48px);font-weight:800;letter-spacing:-0.03em;margin-bottom:0">Qué está activo<br>y qué falta.</h2>
+  <div class="internals-grid">
+    <div class="internal-card">
+      <div class="ic-label">✓ implementado</div>
+      <h4>Parser CSV</h4>
+      <p>Maneja campos entre comillas, separador nulo para evitar colisiones de keys, <code>keep='first'</code>.</p>
+      <div class="tag-row"><span class="tag">local</span><span class="tag">sin servidor</span></div>
+    </div>
+    <div class="internal-card">
+      <div class="ic-label">✓ implementado</div>
+      <h4>Análisis de duplicados</h4>
+      <p>Máscara booleana por fila. Subset de columnas configurable. Compatible con CSVs de hasta 50MB.</p>
+      <div class="tag-row"><span class="tag">Map()</span><span class="tag">O(n)</span></div>
+    </div>
+    <div class="internal-card">
+      <div class="ic-label">✓ implementado</div>
+      <h4>Preview con tabla</h4>
+      <p>Primeras 60 filas con filas duplicadas en rojo y únicas en verde. Sticky headers. Scroll vertical.</p>
+      <div class="tag-row"><span class="tag">60 filas</span><span class="tag">escaping HTML</span></div>
+    </div>
+    <div class="internal-card">
+      <div class="ic-label">✓ implementado</div>
+      <h4>Descarga del CSV</h4>
+      <p>Genera <code>dataset_limpio.csv</code> con escaping correcto de campos con comas y comillas.</p>
+      <div class="tag-row"><span class="tag">Blob API</span><span class="tag">UTF-8</span></div>
+    </div>
+    <div class="internal-card">
+      <div class="ic-label">⏳ pendiente producción</div>
+      <h4>Pasarela MercadoPago</h4>
+      <p>Backend Express listo. Falta conectar <code>MP_ACCESS_TOKEN</code> y <code>MP_PUBLIC_KEY</code> reales. Wallet Brick ya integrado en <code>index.html</code>.</p>
+      <div class="tag-row"><span class="tag">server.js listo</span><span class="tag">tokens pendientes</span></div>
+    </div>
+    <div class="internal-card">
+      <div class="ic-label">⏳ pendiente producción</div>
+      <h4>Webhook & verificación</h4>
+      <p>Endpoint <code>/webhook</code> y <code>/verify-payment</code> implementados. Falta URL pública para registrar en panel MP.</p>
+      <div class="tag-row"><span class="tag">/verify-payment</span><span class="tag">/webhook</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="logo">cero<span>duplicados</span></div>
+  <p>modo demo · datos procesados localmente · sin almacenamiento · © 2026</p>
+</footer>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────
+let parsedRows     = [];
+let headers        = [];
+let selectedCols   = [];
+let dupMask        = [];   // true = duplicado
+let cleanRows      = [];
+let originalFileName = 'dataset';
+
+// ─── DRAG & DROP ─────────────────────────────────────────
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('dropzone').classList.add('drag-over');
+}
+function handleDragLeave() {
+  document.getElementById('dropzone').classList.remove('drag-over');
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropzone').classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) processFile(f);
+}
+function handleFileSelect(e) {
+  const f = e.target.files[0];
+  if (f) processFile(f);
+}
+
+// ─── PASO 1: CARGAR ARCHIVO ──────────────────────────────
+function processFile(file) {
+  showError('');
+  if (!file.name.toLowerCase().endsWith('.csv')) {
+    showError('Solo se aceptan archivos .csv');
+    return;
+  }
+  if (file.size > 52428800) {
+    showError('El archivo supera 50MB.');
+    return;
+  }
+  originalFileName = file.name.replace(/\.csv$/i, '');
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('fileMeta').textContent = formatBytes(file.size);
+  document.getElementById('outputName').textContent = originalFileName + '_limpio.csv';
+
+  const reader = new FileReader();
+  reader.onload  = e => parseCSV(e.target.result);
+  reader.onerror = ()  => showError('No se pudo leer el archivo.');
+  reader.readAsText(file, 'UTF-8');
+}
+
+// ─── PARSER CSV ──────────────────────────────────────────
+// Maneja campos entre comillas y separador nulo anti-colisión
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+  if (lines.length < 2) { showError('CSV vacío o sin datos.'); return; }
+
+  const parseRow = line => {
+    const cols = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { inQ = !inQ; continue; }
+      if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; continue; }
+      cur += ch;
+    }
+    cols.push(cur.trim());
+    return cols;
+  };
+
+  headers    = parseRow(lines[0]);
+  parsedRows = lines.slice(1).map(l => parseRow(l));
+
+  // Render chips de columnas
+  const chips = document.getElementById('colChips');
+  chips.innerHTML = '';
+  selectedCols = [];
+  headers.forEach((h, i) => {
+    const btn = document.createElement('button');
+    btn.className   = 'col-chip';
+    btn.textContent = h;
+    btn.dataset.idx = i;
+    btn.onclick     = () => toggleCol(btn, i);
+    chips.appendChild(btn);
+  });
+
+  document.getElementById('progressFill').style.width   = '100%';
+  document.getElementById('analysis').style.display     = 'block';
+  document.getElementById('results').style.display      = 'none';
+  document.getElementById('download-state').style.display = 'none';
+  document.getElementById('analysis').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function toggleCol(btn, idx) {
+  if (btn.classList.contains('selected')) {
+    btn.classList.remove('selected');
+    selectedCols = selectedCols.filter(i => i !== idx);
+  } else {
+    btn.classList.add('selected');
+    selectedCols.push(idx);
+  }
+}
+
+// ─── PASO 3: ANÁLISIS ─── df.duplicated(keep='first') ────
+function runAnalysis() {
+  if (!parsedRows.length) return;
+
+  const subset = selectedCols.length > 0
+    ? selectedCols
+    : headers.map((_, i) => i);
+
+  const seen = new Map();
+  dupMask   = [];
+  cleanRows = [];
+
+  parsedRows.forEach((row, i) => {
+    // separador nulo para evitar colisiones: "a,b" vs "a" + "b"
+    const key = subset
+      .map(ci => (row[ci] ?? '').toString().toLowerCase().trim())
+      .join('\x00');
+
+    if (seen.has(key)) {
+      dupMask.push(true);           // duplicado → excluir
+    } else {
+      seen.set(key, i);
+      dupMask.push(false);          // primera aparición → conservar
+      cleanRows.push(row);
+    }
+  });
+
+  const total  = parsedRows.length;
+  const dups   = dupMask.filter(Boolean).length;
+  const unique = total - dups;
+
+  document.getElementById('statTotal').textContent    = total.toLocaleString();
+  document.getElementById('statDups').textContent     = dups.toLocaleString();
+  document.getElementById('statClean').textContent    = unique.toLocaleString();
+  document.getElementById('removedCount').textContent = dups.toLocaleString();
+  document.getElementById('keepCount').textContent    = unique.toLocaleString();
+
+  renderPreview();
+
+  document.getElementById('results').style.display        = 'block';
+  document.getElementById('download-state').style.display = 'block';
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ─── PASO 4: PREVIEW ─────────────────────────────────────
+function renderPreview() {
+  const MAX = 60;
+  let html = '<thead><tr><th style="width:52px">estado</th>';
+  headers.forEach(h => { html += `<th>${esc(h)}</th>`; });
+  html += '</tr></thead><tbody>';
+
+  parsedRows.slice(0, MAX).forEach((row, i) => {
+    const isDup = dupMask[i];
+    const cls   = isDup ? 'dup' : 'unique';
+    const tag   = isDup
+      ? `<span style="color:var(--red);font-weight:700">✕ DUP</span>`
+      : `<span style="color:var(--accent)">✓</span>`;
+    html += `<tr class="${cls}"><td>${tag}</td>`;
+    headers.forEach((_, ci) => {
+      const val = (row[ci] ?? '').toString();
+      html += `<td title="${esc(val)}">${esc(val.substring(0, 28))}</td>`;
+    });
+    html += '</tr>';
+  });
+
+  if (parsedRows.length > MAX) {
+    html += `<tr><td colspan="${headers.length + 1}" style="color:var(--muted);text-align:center;padding:12px;font-family:JetBrains Mono,monospace;font-size:11px">
+      … ${(parsedRows.length - MAX).toLocaleString()} filas más no mostradas en preview
+    </td></tr>`;
+  }
+
+  html += '</tbody>';
+  document.getElementById('previewTable').innerHTML = html;
+}
+
+// ─── PASO 6: DESCARGA ─── drop_duplicates(keep='first') ──
+function downloadClean() {
+  const lines = [headers.join(',')];
+  cleanRows.forEach(row => {
+    const cells = row.map(cell => {
+      const s = (cell ?? '').toString();
+      return (s.includes(',') || s.includes('"') || s.includes('\n'))
+        ? '"' + s.replace(/"/g, '""') + '"'
+        : s;
+    });
+    lines.push(cells.join(','));
+  });
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = originalFileName + '_limpio.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ─── UTILS ───────────────────────────────────────────────
+function formatBytes(b) {
+  if (b < 1024)    return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(1) + ' MB';
+}
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent   = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+</script>
+</body>
+</html>

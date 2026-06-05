@@ -1,0 +1,719 @@
+# CeroDuplicados — Documentación Interna del Sistema
+
+> **Versión:** 1.0  
+> **Estado:** Producción (pago pendiente de credenciales)  
+> **Última actualización:** Junio 2026  
+> **Para:** Cualquier desarrollador que tome el sistema, lo mejore o lo opere
+
+---
+
+## Índice
+
+1. [Qué es CeroDuplicados](#1-qué-es-ceroduplicados)
+2. [Stack tecnológico](#2-stack-tecnológico)
+3. [Arquitectura general](#3-arquitectura-general)
+4. [Estructura de archivos](#4-estructura-de-archivos)
+5. [Flujo completo del usuario](#5-flujo-completo-del-usuario)
+6. [Proceso de deduplicación — detalle técnico](#6-proceso-de-deduplicación--detalle-técnico)
+7. [Módulo de pago — MercadoPago](#7-módulo-de-pago--mercadopago)
+8. [Backend — server.js](#8-backend--serverjs)
+9. [Frontend — index.html](#9-frontend--indexhtml)
+10. [Variables de entorno](#10-variables-de-entorno)
+11. [Restricciones y límites del sistema](#11-restricciones-y-límites-del-sistema)
+12. [Modelo de negocio](#12-modelo-de-negocio)
+13. [Privacidad y seguridad](#13-privacidad-y-seguridad)
+14. [Deploy y operación](#14-deploy-y-operación)
+15. [Modo demo](#15-modo-demo)
+16. [Espacio de mejoras — roadmap interno](#16-espacio-de-mejoras--roadmap-interno)
+17. [Glosario](#17-glosario)
+
+---
+
+## 1. Qué es CeroDuplicados
+
+CeroDuplicados es una **herramienta web de pago único** que permite a cualquier persona subir un archivo CSV, detectar filas duplicadas según columnas clave, visualizar el resultado y descargar el dataset limpio. El costo es fijo: **$5 USD por dataset procesado**.
+
+### Propósito
+
+Resolver un problema concreto y frecuente: datasets con filas repetidas que contaminan análisis, modelos de ML, reportes y pipelines de datos. La herramienta está pensada para data analysts, científicos de datos, equipos de marketing y cualquier persona que trabaje con CSVs.
+
+### Principio de diseño central
+
+> **Privacy by design.** Los datos del usuario nunca salen de su navegador. El servidor solo sirve HTML estático y procesa el pago. El CSV se lee, analiza y descarga 100% en el cliente.
+
+---
+
+## 2. Stack tecnológico
+
+| Capa | Tecnología | Razón |
+|---|---|---|
+| Frontend | HTML + CSS + Vanilla JS | Sin dependencias, carga instantánea, máxima compatibilidad |
+| Backend | Node.js + Express | Ligero, suficiente para las 3 rutas necesarias |
+| Pagos | MercadoPago SDK v3 | Cobertura en LATAM, Checkout Bricks, verificación server-side |
+| Tipografía | Syne + JetBrains Mono (Google Fonts) | Estética técnica/editorial diferenciada |
+| Hosting recomendado | Railway / Render / VPS | Soporte para Node.js |
+
+**No se usa ningún framework JS** (React, Vue, etc.) — decisión deliberada para mantener el bundle en cero y el tiempo de carga bajo.
+
+---
+
+## 3. Arquitectura general
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    NAVEGADOR DEL USUARIO                │
+│                                                         │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │               index.html                          │  │
+│  │                                                   │  │
+│  │  1. FileReader API   → lee el CSV en memoria      │  │
+│  │  2. Parser CSV       → array de arrays            │  │
+│  │  3. Lógica de dedup  → máscara booleana           │  │
+│  │  4. Render preview   → tabla HTML                 │  │
+│  │  5. MP Wallet Brick  → botón de pago              │  │
+│  │  6. Blob API         → genera y descarga CSV      │  │
+│  └───────────────────────────────────────────────────┘  │
+│          │ POST /create-preference       ↑              │
+│          │ POST /verify-payment          │              │
+└──────────┼───────────────────────────────┼──────────────┘
+           ↓                               │
+┌─────────────────────────┐    ┌───────────────────────┐
+│      server.js          │    │   MercadoPago API      │
+│   (Node + Express)      │───▶│   (nube de MP)         │
+│                         │    │                        │
+│  POST /create-preference│    │  Crea preferencia      │
+│  POST /verify-payment   │◀───│  Verifica estado pago  │
+│  POST /webhook          │    │  Notifica cambios      │
+└─────────────────────────┘    └───────────────────────┘
+```
+
+### Qué toca el servidor
+
+El servidor **solo maneja dinero**. No procesa datos del usuario, no guarda archivos, no lee el CSV. Sus únicas responsabilidades:
+
+1. Crear una preferencia de pago en MercadoPago (con tu Access Token)
+2. Verificar server-side que un pago esté aprobado antes de liberar la descarga
+3. Recibir webhooks de MP para registro/logs
+
+---
+
+## 4. Estructura de archivos
+
+```
+ceroduplicados/
+│
+├── index.html          ← App completa (producción, con MP)
+├── index-demo.html     ← Versión demo sin pago (para pruebas)
+├── server.js           ← Backend Express + MercadoPago
+├── package.json        ← Dependencias: express, mercadopago
+├── .env                ← Credenciales reales (NO subir a git)
+├── .env.example        ← Plantilla de variables (sí subir a git)
+└── .gitignore          ← Debe incluir: node_modules/, .env
+```
+
+### `.gitignore` mínimo recomendado
+
+```
+node_modules/
+.env
+*.csv
+```
+
+---
+
+## 5. Flujo completo del usuario
+
+### Paso 1 — Subir CSV
+
+El usuario arrastra o selecciona un archivo `.csv`. El archivo se lee con la `FileReader API` en texto plano (UTF-8). **Nunca se envía al servidor.**
+
+Validaciones aplicadas:
+- Extensión debe ser `.csv`
+- Tamaño máximo: 50 MB (configurable en `processFile()`)
+- Mínimo 2 líneas (encabezado + al menos 1 fila de datos)
+
+### Paso 2 — Elegir columnas clave
+
+Se parsea la primera fila del CSV como encabezados y se renderizan como "chips" clicables. El usuario puede:
+
+- **Seleccionar columnas específicas** → solo esas determinarán si una fila es duplicada (equivalente al parámetro `subset` de `pandas.DataFrame.duplicated()`)
+- **No seleccionar nada** → se usan todas las columnas (equivalente a `subset=None`)
+
+### Paso 3 — Análisis automático
+
+Al hacer clic en "Analizar duplicados", se ejecuta la lógica de deduplicación (ver sección 6).
+
+### Paso 4 — Vista previa
+
+Se muestran:
+- **Tarjetas de estadísticas:** total de filas / filas duplicadas / filas únicas
+- **Tabla preview:** primeras 50-60 filas con duplicados resaltados en rojo y únicos en verde
+- **Bloque de pago:** precio $5 + botón MercadoPago Wallet Brick
+
+### Paso 5 — Pago
+
+El Wallet Brick de MercadoPago se renderiza dentro de la página. El usuario paga $5 USD en un modal (sin salir del sitio). Al completar el pago, MP redirige a `/?payment=success&payment_id=XXX`.
+
+En `index.html`, `checkPaymentReturn()` detecta los parámetros en la URL, llama a `/verify-payment` en el servidor, y si el pago está aprobado, desbloquea la descarga.
+
+### Paso 6 — Descarga
+
+El botón "Descargar CSV limpio" llama a `downloadClean()`, que:
+1. Construye el CSV limpio en memoria (solo las filas donde `dupMask[i] === false`)
+2. Crea un `Blob` con el contenido
+3. Genera una URL temporal con `URL.createObjectURL()`
+4. Dispara la descarga del archivo `nombreoriginal_limpio.csv`
+5. Revoca la URL temporal con `URL.revokeObjectURL()` para liberar memoria
+
+---
+
+## 6. Proceso de deduplicación — detalle técnico
+
+### Algoritmo
+
+La lógica replica exactamente el comportamiento de `pandas.DataFrame.duplicated(keep='first')`:
+
+```javascript
+function runAnalysis() {
+  // subset = columnas seleccionadas, o todas si no hay selección
+  const subset = selectedCols.length > 0
+    ? selectedCols
+    : headers.map((_, i) => i);
+
+  const seen = new Map();  // key → índice de primera aparición
+  dupMask   = [];
+  cleanRows = [];
+
+  parsedRows.forEach((row, i) => {
+    // Construir clave compuesta con separador nulo
+    const key = subset
+      .map(ci => (row[ci] ?? '').toString().toLowerCase().trim())
+      .join('\x00');   // ← separador nulo, evita colisiones
+
+    if (seen.has(key)) {
+      dupMask.push(true);    // duplicado → excluir
+    } else {
+      seen.set(key, i);
+      dupMask.push(false);   // primera aparición → conservar
+      cleanRows.push(row);
+    }
+  });
+}
+```
+
+### Decisiones de diseño del algoritmo
+
+| Decisión | Razón |
+|---|---|
+| `keep='first'` — se conserva la primera ocurrencia | Comportamiento estándar y predecible |
+| `.toLowerCase().trim()` | Normalización antes de comparar — "Juan" y "juan" se tratan como duplicados |
+| Separador `\x00` (nulo) | Evita colisiones del tipo: columna1="a,b" + columna2="c" vs columna1="a" + columna2="b,c" |
+| `Map` en lugar de `Set` | Permite guardar el índice de la primera aparición (útil para futura trazabilidad) |
+| Complejidad O(n) | Lineal — funciona bien con datasets de hasta ~500K filas en el navegador |
+
+### Parser CSV
+
+El CSV se parsea línea a línea con un parser propio que maneja:
+- Campos entre comillas dobles (`"campo con, coma"`)
+- Comillas escapadas (`""`)
+- Saltos de línea dentro de campos (si el campo está entre comillas)
+
+```javascript
+const parseRow = line => {
+  const cols = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') { inQ = !inQ; continue; }
+    if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; continue; }
+    cur += ch;
+  }
+  cols.push(cur.trim());
+  return cols;
+};
+```
+
+**Limitación conocida:** El parser asume coma (`,`) como separador. No soporta `;` o `\t` automáticamente. Ver sección 16 para mejora planificada.
+
+### Generación del CSV limpio
+
+Al descargar, se re-serializa el array `cleanRows` con escaping correcto:
+
+```javascript
+const cells = row.map(cell => {
+  const s = (cell ?? '').toString();
+  // Envolver en comillas si contiene coma, comilla o salto de línea
+  return (s.includes(',') || s.includes('"') || s.includes('\n'))
+    ? '"' + s.replace(/"/g, '""') + '"'
+    : s;
+});
+```
+
+---
+
+## 7. Módulo de pago — MercadoPago
+
+### Credenciales necesarias
+
+| Credencial | Dónde usarla | Cómo obtenerla |
+|---|---|---|
+| `MP_ACCESS_TOKEN` | `server.js` (solo servidor) | Panel MP → Credenciales → Producción |
+| `MP_PUBLIC_KEY` | `index.html` (frontend) | Panel MP → Credenciales → Producción |
+
+> **Regla de oro:** el `Access Token` NUNCA va en el frontend. Quien lo tenga puede crear pagos y mover dinero en tu nombre.
+
+### Endpoints del servidor relacionados con MP
+
+#### `POST /create-preference`
+
+Crea una preferencia de pago en la API de MP usando el Access Token del servidor. Devuelve el `preference_id` que necesita el Wallet Brick en el navegador.
+
+```
+Frontend → POST /create-preference
+         ← { success: true, preference_id: "...", init_point: "..." }
+```
+
+La preferencia incluye:
+- Monto: `5.00 USD` (configurable)
+- Descripción del producto
+- `back_urls` para retorno post-pago
+- `auto_return: 'approved'`
+- Expiración: 30 minutos
+- `external_reference` para trazabilidad
+
+#### `POST /verify-payment`
+
+Verifica server-side que un `payment_id` esté realmente aprobado. Se llama desde el frontend al volver de MP con `?payment=success&payment_id=XXX`.
+
+```
+Frontend → POST /verify-payment { payment_id: "123456" }
+         ← { success: true, status: "approved" }
+         ← { success: false, status: "pending" } (no desbloquea)
+```
+
+#### `POST /webhook`
+
+MP envía notificaciones automáticas aquí cuando cambia el estado de un pago. Actualmente solo loguea. Ideal para extender con base de datos o envío de emails.
+
+### Flujo de pago detallado
+
+```
+1. Usuario hace clic "Analizar duplicados"
+        ↓
+2. Frontend llama POST /create-preference
+        ↓
+3. Servidor crea preferencia en MP (con Access Token)
+   y devuelve preference_id
+        ↓
+4. Frontend inicializa Wallet Brick con ese preference_id
+        ↓
+5. Usuario ve el botón azul de MP y hace clic
+        ↓
+6. MP abre modal de pago (sin salir de la página — redirectMode: 'modal')
+        ↓
+7. Usuario completa el pago
+        ↓
+8. MP redirige a /?payment=success&payment_id=123456
+        ↓
+9. Frontend detecta parámetros en URL y limpia la URL
+        ↓
+10. Frontend llama POST /verify-payment { payment_id: "123456" }
+        ↓
+11. Servidor consulta estado en API de MP
+        ↓
+12a. approved → frontend desbloquea botón de descarga ✅
+12b. pending  → muestra mensaje de pago pendiente
+12c. failure  → muestra error, permite reintentar
+```
+
+### Cambiar el precio
+
+Hay **dos lugares** donde está el precio — ambos deben coincidir:
+
+**En `server.js`** (el precio real que cobra MP):
+```javascript
+unit_price: 5.00,
+currency_id: 'USD',
+```
+
+**En `index.html`** (el precio mostrado al usuario):
+```html
+<div class="price-tag"><sup>$</sup>5<sup>.00</sup></div>
+```
+
+---
+
+## 8. Backend — server.js
+
+### Dependencias
+
+```json
+{
+  "express": "^4.19.2",
+  "mercadopago": "^3.1.0"
+}
+```
+
+### Rutas
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET /*` | Static | Sirve `index.html` y assets |
+| `POST` | `/create-preference` | Crea preferencia MP, devuelve `preference_id` |
+| `POST` | `/verify-payment` | Verifica estado de un pago por `payment_id` |
+| `POST` | `/webhook` | Recibe notificaciones push de MP |
+
+### Inicialización del cliente MP
+
+```javascript
+const { MercadoPagoConfig, Preference, Payment } = require('mercadopago');
+
+const client = new MercadoPagoConfig({
+  accessToken: process.env.MP_ACCESS_TOKEN,
+});
+```
+
+### Manejo de errores
+
+Todos los endpoints tienen `try/catch`. Los errores se loguean con `console.error` y devuelven `{ success: false, error: message }`. En producción se recomienda agregar un logger estructurado (winston, pino).
+
+---
+
+## 9. Frontend — index.html
+
+### Estado global (variables JS)
+
+| Variable | Tipo | Descripción |
+|---|---|---|
+| `parsedRows` | `Array<Array<string>>` | Todas las filas del CSV (sin header) |
+| `headers` | `Array<string>` | Primera fila del CSV |
+| `selectedCols` | `Array<number>` | Índices de columnas seleccionadas como clave |
+| `dupMask` | `Array<boolean>` | `true` = duplicado en esa posición |
+| `cleanRows` | `Array<Array<string>>` | Solo filas donde `dupMask[i] === false` |
+| `paidAndReady` | `boolean` | `true` = pago verificado, descarga desbloqueada |
+| `mpBrickRendered` | `boolean` | Evita renderizar el Brick dos veces |
+| `originalFileName` | `string` | Nombre del CSV sin extensión |
+
+### Funciones principales
+
+| Función | Qué hace |
+|---|---|
+| `processFile(file)` | Valida y lee el archivo con FileReader |
+| `parseCSV(text)` | Parsea texto CSV a `headers` + `parsedRows` |
+| `toggleCol(btn, idx)` | Agrega/quita columna de `selectedCols` |
+| `runAnalysis()` | Ejecuta deduplicación y actualiza UI |
+| `renderPreview()` | Construye la tabla HTML de preview |
+| `initMercadoPago()` | Llama `/create-preference` y renderiza Wallet Brick |
+| `checkPaymentReturn()` | Lee params de URL al volver de MP y llama `/verify-payment` |
+| `unlockDownload()` | Muestra el estado de éxito y activa el botón |
+| `downloadClean()` | Serializa `cleanRows` y dispara la descarga |
+
+### Sistema de estados de UI
+
+```
+Estado inicial
+    → [archivo cargado] → panel #analysis visible
+        → [análisis ejecutado] → #results visible + #payment visible
+            → [pago completado] → #payment oculto + #success-state visible
+```
+
+---
+
+## 10. Variables de entorno
+
+Archivo `.env` (nunca subir a git):
+
+```bash
+# MercadoPago
+MP_ACCESS_TOKEN=APP_USR-xxxxxxxxxxxxxxxxxxxx   # Access Token de producción
+MP_WEBHOOK_URL=https://tudominio.com/webhook    # URL pública para notificaciones MP
+APP_URL=https://tudominio.com                   # URL base de la app
+
+# Servidor
+PORT=8080
+```
+
+Variable en el **frontend** (dentro de `index.html`, línea cerca de `MP_PUBLIC_KEY`):
+
+```javascript
+const MP_PUBLIC_KEY = 'APP_USR-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx';
+```
+
+> Esta clave es pública por diseño — el SDK de MP la necesita en el navegador. No es un secreto, pero sí debe ser la clave de **producción** solo cuando el sitio esté en dominio real.
+
+---
+
+## 11. Restricciones y límites del sistema
+
+### Límites actuales (hardcoded)
+
+| Límite | Valor | Dónde cambiarlo |
+|---|---|---|
+| Tamaño máximo de archivo | 50 MB | `processFile()` → `file.size > 52428800` |
+| Filas en preview | 50 (index.html) / 60 (demo) | `renderPreview()` → `const MAX_ROWS` |
+| Expiración de preferencia MP | 30 minutos | `server.js` → `expiration_date_to` |
+| Precio | $5.00 USD | `server.js` → `unit_price` + HTML |
+
+### Restricciones de diseño
+
+- **Solo CSV con coma como separador.** No soporta `;` ni `\t` automáticamente.
+- **Encoding asumido: UTF-8.** CSVs en ISO-8859-1 / Latin-1 pueden mostrar caracteres incorrectos.
+- **Sin persistencia.** Si el usuario cierra el navegador después de pagar pero antes de descargar (en modo modal), puede perder el acceso. Mitigado parcialmente por `checkPaymentReturn()`.
+- **Sin autenticación de usuarios.** El sistema no sabe quién pagó ni guarda historial. Cada sesión es independiente.
+- **Sin límite de uso por IP.** Una misma persona puede pagar múltiples veces (esto es el comportamiento deseado para el modelo de negocio).
+- **El parser CSV es simple.** Campos con saltos de línea dentro de comillas pueden parsearse incorrectamente.
+
+### Restricciones de MercadoPago
+
+- **Moneda:** configurada en USD. MP puede convertir a moneda local según el país del pagador.
+- **Comisión de MP:** varía por país y método de pago. Aproximadamente 3.5%–5.99% del monto.
+- **El webhook requiere URL pública.** En desarrollo local no funciona — usar ngrok o similar para pruebas.
+
+---
+
+## 12. Modelo de negocio
+
+| Concepto | Detalle |
+|---|---|
+| Precio | $5.00 USD fijo por dataset |
+| Modelo | Pago único — sin suscripción, sin cuenta, sin registro |
+| Comisión MP | ~3.5%–6% dependiendo del método ($0.17–$0.30 por venta) |
+| Ingreso neto estimado por venta | ~$4.70–$4.83 USD |
+| Infraestructura | Railway plan Hobby ~$5/mes (suficiente para el tráfico inicial) |
+| Break-even mensual | 2 ventas cubren el hosting |
+
+### Punto de precio
+
+$5 USD está posicionado como **umbral de no-pensarlo** — por debajo del costo cognitivo de escribir el código o buscar una alternativa. El cliente objetivo lo paga sin aprobación de presupuesto.
+
+---
+
+## 13. Privacidad y seguridad
+
+### Qué datos toca el servidor
+
+| Dato | ¿Lo ve el servidor? |
+|---|---|
+| Contenido del CSV | ❌ Nunca |
+| Nombre del archivo | ❌ Nunca |
+| Columnas seleccionadas | ❌ Nunca |
+| Número de duplicados | ❌ Nunca |
+| Monto del pago ($5) | ✅ Sí (para crear la preferencia) |
+| `payment_id` de MP | ✅ Sí (para verificar) |
+| Estado del pago | ✅ Sí (approved/pending/failure) |
+
+### Consideraciones de seguridad
+
+- El `Access Token` de MP **solo existe en el servidor** y se carga desde variables de entorno. Nunca se hardcodea en el código ni se expone en el frontend.
+- La verificación del pago es **siempre server-side** — el frontend no puede "hacerse el pagado" porque la confirmación la da la API de MP consultada desde el servidor.
+- No hay base de datos — no hay superficie de ataque para robo de datos de usuarios.
+- El servidor no guarda logs de contenido de CSVs porque simplemente nunca los recibe.
+
+---
+
+## 14. Deploy y operación
+
+### Requisitos del servidor
+
+- Node.js >= 18.0.0
+- npm
+- Variables de entorno configuradas
+
+### Pasos de deploy
+
+```bash
+# 1. Clonar/subir el repositorio
+git clone https://github.com/usuario/ceroduplicados.git
+cd ceroduplicados
+
+# 2. Instalar dependencias
+npm install
+
+# 3. Crear archivo .env con credenciales reales
+cp .env.example .env
+# editar .env con MP_ACCESS_TOKEN real, APP_URL, etc.
+
+# 4. Actualizar MP_PUBLIC_KEY en index.html
+# Buscar: const MP_PUBLIC_KEY = 'TU_PUBLIC_KEY_AQUI';
+# Reemplazar con la clave pública real de producción
+
+# 5. Iniciar el servidor
+npm start
+# → Corriendo en http://localhost:8080
+```
+
+### Deploy en Railway
+
+```bash
+# railway.json ya incluido en el repo
+# 1. Conectar repo en railway.app
+# 2. Configurar variables de entorno en Railway → Variables:
+#    MP_ACCESS_TOKEN, APP_URL, MP_WEBHOOK_URL, PORT
+# 3. Railway detecta Node.js y ejecuta npm start automáticamente
+```
+
+### Registrar webhook en MercadoPago
+
+1. Ir a [mercadopago.com/developers/panel/notifications](https://www.mercadopago.com/developers/panel/notifications)
+2. Agregar la URL: `https://tudominio.com/webhook`
+3. Seleccionar evento: `payment`
+4. Guardar
+
+### Verificar que funciona
+
+```bash
+# Test local del servidor
+curl -X POST http://localhost:8080/create-preference \
+  -H "Content-Type: application/json" \
+  -d '{"amount": 5.00}'
+
+# Respuesta esperada:
+# { "success": true, "preference_id": "...", "init_point": "..." }
+```
+
+---
+
+## 15. Modo demo
+
+El archivo `index-demo.html` es una versión completa del sistema con el pago desactivado. Sirve para:
+
+- Probar el parser CSV con datos reales
+- Validar la lógica de deduplicación
+- Mostrar el producto a clientes potenciales sin cobrarles
+- Iterar en el diseño y la UX sin tocar el flujo de pago
+
+### Diferencias demo vs producción
+
+| Característica | Demo (`index-demo.html`) | Producción (`index.html`) |
+|---|---|---|
+| Pago | ❌ Desactivado | ✅ MercadoPago activo |
+| Descarga | ✅ Inmediata y libre | 🔒 Requiere pago verificado |
+| Backend necesario | ❌ No (archivo estático) | ✅ Sí (server.js) |
+| Sección "Internals" | ✅ Visible | ❌ No incluida |
+| Banner demo | ✅ Visible con punto parpadeante | ❌ No |
+| Lógica de dedup | ✅ Idéntica a producción | ✅ Idéntica a demo |
+
+El demo **puede abrirse directamente en el navegador** como archivo local — no requiere servidor.
+
+---
+
+## 16. Espacio de mejoras — roadmap interno
+
+Las siguientes mejoras están identificadas, priorizadas y listas para implementar. Están organizadas por impacto vs esfuerzo.
+
+---
+
+### 🟢 Alta prioridad — Bajo esfuerzo
+
+#### 16.1 Soporte de separadores alternativos
+
+**Problema:** CSVs con `;` (Europa) o `\t` (TSV) no se parsean correctamente.
+
+**Solución propuesta:**
+```javascript
+// Auto-detectar separador al parsear la primera línea
+function detectSeparator(firstLine) {
+  const counts = { ',': 0, ';': 0, '\t': 0, '|': 0 };
+  for (const ch of firstLine) {
+    if (counts[ch] !== undefined) counts[ch]++;
+  }
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+}
+```
+
+#### 16.2 Soporte de encoding Latin-1 / ISO-8859-1
+
+**Problema:** CSVs exportados desde Excel en Windows usan Latin-1, los caracteres como `ñ`, `á`, `é` se rompen.
+
+**Solución propuesta:**
+```javascript
+// Intentar UTF-8, si falla (caracteres de reemplazo), reintentar con Latin-1
+reader.readAsText(file, 'UTF-8');
+// Si el resultado contiene \uFFFD, releer con 'ISO-8859-1'
+```
+
+#### 16.3 Indicador de progreso real para archivos grandes
+
+**Problema:** Para archivos de 20-50 MB, el análisis puede tomar 1-3 segundos y la UI no da feedback.
+
+**Solución propuesta:** Usar `requestAnimationFrame` o un `setTimeout` para procesar en chunks y actualizar la barra de progreso.
+
+---
+
+### 🟡 Prioridad media — Esfuerzo moderado
+
+#### 16.4 Modo "keep='last'"
+
+Permitir al usuario elegir si conservar la primera o la última ocurrencia de cada duplicado. Agregar un toggle en la UI antes del análisis.
+
+#### 16.5 Exportar reporte de duplicados
+
+Además del CSV limpio, ofrecer un segundo archivo `dataset_duplicados.csv` con solo las filas eliminadas, para auditoría.
+
+#### 16.6 Historial de sesión con sessionStorage
+
+Si el usuario paga pero cierra el tab accidentalmente, al volver pierde el acceso. Guardar el estado del análisis en `sessionStorage` para recuperarlo.
+
+```javascript
+// Guardar después del análisis
+sessionStorage.setItem('cerodup_state', JSON.stringify({
+  headers, parsedRows, dupMask, cleanRows, originalFileName
+}));
+
+// Recuperar en checkPaymentReturn() si cleanRows está vacío
+```
+
+#### 16.7 Normalización avanzada antes de comparar
+
+Actualmente se aplica `.toLowerCase().trim()`. Se podría ofrecer opciones:
+- Ignorar acentos (normalización Unicode NFD)
+- Ignorar espacios internos
+- Comparar solo los primeros N caracteres
+
+#### 16.8 Soporte multi-archivo
+
+Procesar varios CSVs en lote y descargarlos como ZIP. Precio podría ser $5 por el primero + $2 por cada adicional.
+
+---
+
+### 🔴 Prioridad baja — Alto esfuerzo / Para escalar
+
+#### 16.9 Dashboard de ventas
+
+Panel simple con métricas: ventas totales, ingresos acumulados, archivos procesados. Requiere base de datos (Postgres o SQLite) y un endpoint autenticado.
+
+#### 16.10 Email de confirmación
+
+Enviar el CSV limpio por email después del pago. Requiere capturar el email del usuario (en el formulario de MP ya está disponible), integración con SendGrid o Resend.
+
+#### 16.11 API para integraciones
+
+Ofrecer una API REST autenticada con API keys para que otros sistemas puedan limpiar CSVs programáticamente. Precio diferente (por volumen o suscripción mensual).
+
+#### 16.12 Procesamiento server-side para archivos > 50MB
+
+Para datasets grandes (500K+ filas), mover el procesamiento al servidor usando streams de Node.js. El usuario sube el archivo, el servidor lo procesa y devuelve la URL de descarga.
+
+---
+
+## 17. Glosario
+
+| Término | Definición en el contexto del sistema |
+|---|---|
+| **Duplicado** | Fila cuya combinación de valores en las columnas clave coincide exactamente (case-insensitive, sin espacios) con una fila anterior |
+| **Columnas clave** | Subset de columnas elegidas por el usuario para determinar si dos filas son iguales. Equivale al parámetro `subset` de pandas |
+| **dupMask** | Array booleano paralelo a `parsedRows`. `true` en posición `i` significa que la fila `i` es un duplicado de una fila anterior |
+| **cleanRows** | Array con solo las filas donde `dupMask[i] === false`. Este es el dataset final que se descarga |
+| **keep='first'** | Política de deduplicación: ante varias filas idénticas, se conserva la primera y se eliminan las demás |
+| **Wallet Brick** | Componente visual de MercadoPago que renderiza el botón de pago y maneja el flujo de checkout sin salir de la página |
+| **preference_id** | ID único de una intención de pago en MercadoPago. Se crea server-side y se pasa al Wallet Brick |
+| **payment_id** | ID del pago efectivo en MP, generado cuando el usuario completa la transacción. Se usa para verificar |
+| **Access Token** | Credencial secreta de MP que permite crear preferencias y consultar pagos. Solo va en el servidor |
+| **Public Key** | Credencial pública de MP que el SDK del navegador necesita para inicializar el Wallet Brick |
+| **Privacy by design** | Principio de diseño: los datos sensibles del usuario (el CSV) nunca salen de su dispositivo. El servidor no los necesita para hacer su trabajo |
+
+---
+
+Mas informacion acerca del impacto de la duplicacion de datos en: https://www.oracle.com/latam/data-duplication/#what-is-data-duplication 
+
+*Documentación mantenida por el equipo de CeroDuplicados. Actualizar con cada cambio significativo en la arquitectura o el flujo de pago.*
