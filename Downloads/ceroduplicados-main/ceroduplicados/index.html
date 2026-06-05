@@ -620,7 +620,7 @@ let mpBrickRendered  = false;
 
 // MP Public Key — reemplaza con tu clave pública de producción o sandbox
 // La obtienes en: https://www.mercadopago.com/developers/panel/credentials
-const MP_PUBLIC_KEY = 'TEST-fbce8d44-92ce-45ce-9de1-8fac8975ea16';
+const MP_PUBLIC_KEY = 'APP_USR-6a8ea7c4-96d5-44e6-8438-adfec4f4097d';
 
 // ============================================================
 // DRAG & DROP
@@ -880,7 +880,7 @@ async function checkPaymentReturn() {
   if (!status) return; // no hay retorno de MP
 
   // Limpiar URL sin recargar
-  window.history.replaceState({}, '', window.location.pathname);
+  window.history.replaceState({}, document.title, window.location.pathname);
 
   // Pequeño delay para asegurar que localStorage esté disponible
   await new Promise(r => setTimeout(r, 100));
