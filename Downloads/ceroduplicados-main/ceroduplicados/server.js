@@ -28,7 +28,7 @@ app.use((req, res, next) => {
     `script-src 'self' ${ML} 'unsafe-inline' 'unsafe-eval'`,
     `script-src-elem 'self' ${ML} 'unsafe-inline'`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com ${ML}",
+    `font-src 'self' https://fonts.gstatic.com ${ML}`,
     `frame-src ${ML}`,
     `connect-src 'self' ${ML}`,
     `img-src 'self' data: blob: ${ML}`,
